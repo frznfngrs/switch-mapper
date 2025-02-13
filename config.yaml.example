@@ -1,0 +1,30 @@
+# Example configuration file for Switch Mapper
+# Copy this file to config.yaml and update with your settings
+
+switches:
+  # Add multiple switch entries as needed
+  - hostname: "nexus9k-1"
+    ip: "192.168.1.1"
+    username: "admin"
+    password: "your-switch-password"  # Consider using environment variables in production
+    use_nxapi: true  # Set to false for SSH
+    port: 80  # Default NX-API port
+  
+  - hostname: "nexus9k-2"
+    ip: "192.168.1.2"
+    username: "admin"
+    password: "your-switch-password"
+    use_nxapi: true
+    port: 80
+
+bmcs:
+  # Add multiple BMC/iLO entries as needed
+  - ip: "192.168.1.100"
+    username: "admin"
+    password: "your-bmc-password"  # Consider using environment variables in production
+    type: "ilo"  # Use 'ilo' for HPE servers or 'idrac' for Dell servers
+  
+  - ip: "192.168.1.101"
+    username: "admin"
+    password: "your-bmc-password"
+    type: "idrac"
