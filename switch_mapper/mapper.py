@@ -23,12 +23,7 @@ class SwitchMapper:
 
             connections = []
             
-            # Get CDP and LLDP neighbors
-            print("\nGathering CDP neighbors...")
-            cdp_neighbors = client.get_cdp_neighbors()
-            print(f"Found {len(cdp_neighbors)} CDP neighbors")
-            connections.extend(cdp_neighbors)
-            
+            # Get LLDP neighbors
             print("\nGathering LLDP neighbors...")
             lldp_neighbors = client.get_lldp_neighbors()
             print(f"Found {len(lldp_neighbors)} LLDP neighbors")
