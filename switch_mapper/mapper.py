@@ -13,6 +13,7 @@ class SwitchMapper:
     def gather_switch_data(self):
         """Gather data from all configured switches"""
         for switch_config in self.config.switches:
+            print(f"\nGathering data from switch: {switch_config.hostname} ({switch_config.ip})")
             client = NXAPIClient(
                 switch_config.ip,
                 switch_config.username,
@@ -21,17 +22,33 @@ class SwitchMapper:
             )
 
             connections = []
+            
             # Get CDP and LLDP neighbors
-            connections.extend(client.get_cdp_neighbors())
-            connections.extend(client.get_lldp_neighbors())
+            print("\nGathering CDP neighbors...")
+            cdp_neighbors = client.get_cdp_neighbors()
+            print(f"Found {len(cdp_neighbors)} CDP neighbors")
+            connections.extend(cdp_neighbors)
+            
+            print("\nGathering LLDP neighbors...")
+            lldp_neighbors = client.get_lldp_neighbors()
+            print(f"Found {len(lldp_neighbors)} LLDP neighbors")
+            connections.extend(lldp_neighbors)
             
             # Get MAC address table entries
+            print("\nGathering MAC address table...")
             mac_entries = client.get_mac_address_table()
+            print(f"Found {len(mac_entries)} MAC addresses")
+            
+            # Debug print MAC addresses
+            print("\nMAC addresses found:")
+            for entry in mac_entries:
+                print(f"Interface: {entry.interface}, MAC: {entry.mac_address}")
             
             # Add interface status
             interface_status = client.get_interface_status()
             
             # Merge MAC entries with existing connections
+            print("\nMerging MAC entries with neighbor data...")
             for entry in mac_entries:
                 # Check if we already have this interface from CDP/LLDP
                 existing = next(
@@ -39,16 +56,20 @@ class SwitchMapper:
                     None
                 )
                 if existing:
+                    print(f"Adding MAC {entry.mac_address} to existing connection on {entry.interface}")
                     existing.mac_address = entry.mac_address
                 else:
+                    print(f"Adding new connection for MAC {entry.mac_address} on {entry.interface}")
                     connections.append(entry)
 
             self.switch_connections[switch_config.hostname] = connections
 
     def gather_bmc_data(self):
         """Gather MAC address data from BMC/iLO interfaces"""
+        print("\nGathering BMC/iLO data...")
         for bmc_config in self.config.bmcs:
             try:
+                print(f"\nConnecting to BMC/iLO at {bmc_config.ip}")
                 client = create_bmc_client(
                     bmc_config.ip,
                     bmc_config.username,
@@ -58,10 +79,13 @@ class SwitchMapper:
                 
                 network_info = client.get_network_info()
                 hostname = network_info['hostname']
+                print(f"Found hostname: {hostname}")
                 
                 # Map each MAC address to the hostname
+                print("Network interfaces found:")
                 for interface in network_info['interfaces']:
                     if interface['mac_address']:
+                        print(f"Interface: {interface['name']}, MAC: {interface['mac_address']}")
                         self.bmc_mac_to_hostname[interface['mac_address']] = hostname
                         
             except Exception as e:
@@ -69,14 +93,24 @@ class SwitchMapper:
 
     def update_unknown_devices(self):
         """Update unknown devices with hostname information from BMCs"""
+        print("\nCross-referencing MAC addresses with BMC/iLO data...")
+        print("\nKnown BMC MAC addresses:")
+        for mac, hostname in self.bmc_mac_to_hostname.items():
+            print(f"MAC: {mac} -> Hostname: {hostname}")
+            
         for switch_hostname, connections in self.switch_connections.items():
+            print(f"\nChecking connections on switch {switch_hostname}:")
             for conn in connections:
                 if conn.device_type == 'unknown' and conn.mac_address:
+                    print(f"Checking MAC {conn.mac_address} on {conn.interface}")
                     # Check if we have hostname information for this MAC
                     hostname = self.bmc_mac_to_hostname.get(conn.mac_address)
                     if hostname:
+                        print(f"Found match! Updating to server {hostname}")
                         conn.connected_device = hostname
                         conn.device_type = 'server'
+                    else:
+                        print("No matching BMC/iLO MAC address found")
 
     def generate_diagram(self, output_file: str = 'network_diagram') -> str:
         """Generate network diagram using graphviz"""
