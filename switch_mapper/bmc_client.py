@@ -44,26 +44,34 @@ class ILOClient(BMCClient):
     def get_network_info(self) -> Dict:
         """Get network information from iLO including MAC addresses"""
         try:
-            # Get network adapter information
-            network_data = self._send_request('Systems/1/NetworkAdapters')
-            
+            # Get hostname from system data
+            system_data = self._send_request('Systems/1')
             network_info = {
-                'hostname': '',
+                'hostname': system_data.get('HostName', ''),
                 'interfaces': []
             }
             
-            # Get hostname
-            system_data = self._send_request('Systems/1')
-            network_info['hostname'] = system_data.get('HostName', '')
-            
-            # Parse network adapters
-            for adapter in network_data.get('Items', []):
-                for port in adapter.get('PhysicalPorts', []):
+            try:
+                # Try iLO 4 network path first
+                network_data = self._send_request('Systems/1/NetworkPorts')
+                for port in network_data.get('Items', []):
                     network_info['interfaces'].append({
                         'name': port.get('Name', ''),
-                        'mac_address': port.get('MacAddress', '').upper(),
+                        'mac_address': port.get('AssociatedNetworkAddresses', [''])[0].upper(),
                         'status': port.get('Status', {}).get('State', 'Unknown')
                     })
+            except Exception:
+                try:
+                    # Try iLO 5 network path
+                    network_data = self._send_request('Systems/1/BaseNetworkAdapters')
+                    for adapter in network_data.get('Items', []):
+                        network_info['interfaces'].append({
+                            'name': adapter.get('Name', ''),
+                            'mac_address': adapter.get('MacAddress', '').upper(),
+                            'status': adapter.get('Status', {}).get('State', 'Unknown')
+                        })
+                except Exception:
+                    print("Error: Could not find network information using known iLO paths")
             
             return network_info
             

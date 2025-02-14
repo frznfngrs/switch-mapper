@@ -68,16 +68,26 @@ class NXAPIClient:
         neighbors = []
 
         try:
-            # Parse JSON-RPC response
-            result = response.json()
-            if 'error' in result:
-                raise Exception(f"NX-API error: {result['error']['message']}")
-                
-            output = result.get('result', {})
-            if isinstance(output, list):
-                neighbor_data = output[0].get('body', {})
+            # Parse NX-API response
+            if isinstance(response, dict):
+                result = response
             else:
-                neighbor_data = output.get('body', {})
+                result = response.json()
+
+            neighbor_data = {}
+            if 'ins_api' in result:
+                # Handle legacy NX-API format
+                if isinstance(result['ins_api']['outputs']['output'], list):
+                    neighbor_data = result['ins_api']['outputs']['output'][0]['body']
+                else:
+                    neighbor_data = result['ins_api']['outputs']['output']['body']
+            elif 'result' in result:
+                # Handle JSON-RPC format
+                output = result.get('result', {})
+                if isinstance(output, list):
+                    neighbor_data = output[0].get('body', {})
+                else:
+                    neighbor_data = output.get('body', {})
 
             for neighbor in neighbor_data.get('TABLE_cdp_neighbor_detail_info', {}).get('ROW_cdp_neighbor_detail_info', []):
                 neighbors.append(PortConnection(
@@ -99,16 +109,26 @@ class NXAPIClient:
         neighbors = []
 
         try:
-            # Parse JSON-RPC response
-            result = response.json()
-            if 'error' in result:
-                raise Exception(f"NX-API error: {result['error']['message']}")
-                
-            output = result.get('result', {})
-            if isinstance(output, list):
-                neighbor_data = output[0].get('body', {})
+            # Parse NX-API response
+            if isinstance(response, dict):
+                result = response
             else:
-                neighbor_data = output.get('body', {})
+                result = response.json()
+
+            neighbor_data = {}
+            if 'ins_api' in result:
+                # Handle legacy NX-API format
+                if isinstance(result['ins_api']['outputs']['output'], list):
+                    neighbor_data = result['ins_api']['outputs']['output'][0]['body']
+                else:
+                    neighbor_data = result['ins_api']['outputs']['output']['body']
+            elif 'result' in result:
+                # Handle JSON-RPC format
+                output = result.get('result', {})
+                if isinstance(output, list):
+                    neighbor_data = output[0].get('body', {})
+                else:
+                    neighbor_data = output.get('body', {})
 
             for neighbor in neighbor_data.get('TABLE_nbor_detail', {}).get('ROW_nbor_detail', []):
                 neighbors.append(PortConnection(
@@ -130,16 +150,26 @@ class NXAPIClient:
         mac_entries = []
 
         try:
-            # Parse JSON-RPC response
-            result = response.json()
-            if 'error' in result:
-                raise Exception(f"NX-API error: {result['error']['message']}")
-                
-            output = result.get('result', {})
-            if isinstance(output, list):
-                mac_data = output[0].get('body', {})
+            # Parse NX-API response
+            if isinstance(response, dict):
+                result = response
             else:
-                mac_data = output.get('body', {})
+                result = response.json()
+
+            mac_data = {}
+            if 'ins_api' in result:
+                # Handle legacy NX-API format
+                if isinstance(result['ins_api']['outputs']['output'], list):
+                    mac_data = result['ins_api']['outputs']['output'][0]['body']
+                else:
+                    mac_data = result['ins_api']['outputs']['output']['body']
+            elif 'result' in result:
+                # Handle JSON-RPC format
+                output = result.get('result', {})
+                if isinstance(output, list):
+                    mac_data = output[0].get('body', {})
+                else:
+                    mac_data = output.get('body', {})
 
             for entry in mac_data.get('TABLE_mac_address', {}).get('ROW_mac_address', []):
                 mac_entries.append(PortConnection(
@@ -161,16 +191,26 @@ class NXAPIClient:
         interfaces = {}
 
         try:
-            # Parse JSON-RPC response
-            result = response.json()
-            if 'error' in result:
-                raise Exception(f"NX-API error: {result['error']['message']}")
-                
-            output = result.get('result', {})
-            if isinstance(output, list):
-                interface_data = output[0].get('body', {})
+            # Parse NX-API response
+            if isinstance(response, dict):
+                result = response
             else:
-                interface_data = output.get('body', {})
+                result = response.json()
+
+            interface_data = {}
+            if 'ins_api' in result:
+                # Handle legacy NX-API format
+                if isinstance(result['ins_api']['outputs']['output'], list):
+                    interface_data = result['ins_api']['outputs']['output'][0]['body']
+                else:
+                    interface_data = result['ins_api']['outputs']['output']['body']
+            elif 'result' in result:
+                # Handle JSON-RPC format
+                output = result.get('result', {})
+                if isinstance(output, list):
+                    interface_data = output[0].get('body', {})
+                else:
+                    interface_data = output.get('body', {})
 
             for interface in interface_data.get('TABLE_interface', {}).get('ROW_interface', []):
                 interfaces[interface.get('interface', '')] = interface.get('state', '')
