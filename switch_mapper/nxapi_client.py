@@ -17,10 +17,14 @@ class NXAPIClient:
         self.username = username
         self.password = password
         self.port = port
-        self.base_url = f"http://{host}:{port}/ins"
+        protocol = "https" if port == 443 else "http"
+        self.base_url = f"{protocol}://{host}:{port}/ins"
         self.headers = {
-            'content-type': 'application/json'
+            'content-type': 'application/json-rpc'
         }
+        # Disable SSL warnings for self-signed certificates
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def _send_request(self, commands: List[str]) -> Dict:
         payload = {
@@ -35,12 +39,23 @@ class NXAPIClient:
         }
 
         try:
+            # Update payload format for JSON-RPC
+            rpc_payload = {
+                "jsonrpc": "2.0",
+                "method": "cli",
+                "params": {
+                    "cmd": "; ".join(commands),
+                    "version": 1
+                },
+                "id": 1
+            }
+            
             response = requests.post(
                 self.base_url,
-                data=json.dumps(payload),
+                data=json.dumps(rpc_payload),
                 headers=self.headers,
                 auth=(self.username, self.password),
-                verify=False
+                verify=False  # Required for self-signed certificates
             )
             response.raise_for_status()
             return response.json()
@@ -53,10 +68,16 @@ class NXAPIClient:
         neighbors = []
 
         try:
-            if isinstance(response['ins_api']['outputs']['output'], list):
-                neighbor_data = response['ins_api']['outputs']['output'][0]['body']
+            # Parse JSON-RPC response
+            result = response.json()
+            if 'error' in result:
+                raise Exception(f"NX-API error: {result['error']['message']}")
+                
+            output = result.get('result', {})
+            if isinstance(output, list):
+                neighbor_data = output[0].get('body', {})
             else:
-                neighbor_data = response['ins_api']['outputs']['output']['body']
+                neighbor_data = output.get('body', {})
 
             for neighbor in neighbor_data.get('TABLE_cdp_neighbor_detail_info', {}).get('ROW_cdp_neighbor_detail_info', []):
                 neighbors.append(PortConnection(
@@ -78,10 +99,16 @@ class NXAPIClient:
         neighbors = []
 
         try:
-            if isinstance(response['ins_api']['outputs']['output'], list):
-                neighbor_data = response['ins_api']['outputs']['output'][0]['body']
+            # Parse JSON-RPC response
+            result = response.json()
+            if 'error' in result:
+                raise Exception(f"NX-API error: {result['error']['message']}")
+                
+            output = result.get('result', {})
+            if isinstance(output, list):
+                neighbor_data = output[0].get('body', {})
             else:
-                neighbor_data = response['ins_api']['outputs']['output']['body']
+                neighbor_data = output.get('body', {})
 
             for neighbor in neighbor_data.get('TABLE_nbor_detail', {}).get('ROW_nbor_detail', []):
                 neighbors.append(PortConnection(
@@ -103,10 +130,16 @@ class NXAPIClient:
         mac_entries = []
 
         try:
-            if isinstance(response['ins_api']['outputs']['output'], list):
-                mac_data = response['ins_api']['outputs']['output'][0]['body']
+            # Parse JSON-RPC response
+            result = response.json()
+            if 'error' in result:
+                raise Exception(f"NX-API error: {result['error']['message']}")
+                
+            output = result.get('result', {})
+            if isinstance(output, list):
+                mac_data = output[0].get('body', {})
             else:
-                mac_data = response['ins_api']['outputs']['output']['body']
+                mac_data = output.get('body', {})
 
             for entry in mac_data.get('TABLE_mac_address', {}).get('ROW_mac_address', []):
                 mac_entries.append(PortConnection(
@@ -128,10 +161,16 @@ class NXAPIClient:
         interfaces = {}
 
         try:
-            if isinstance(response['ins_api']['outputs']['output'], list):
-                interface_data = response['ins_api']['outputs']['output'][0]['body']
+            # Parse JSON-RPC response
+            result = response.json()
+            if 'error' in result:
+                raise Exception(f"NX-API error: {result['error']['message']}")
+                
+            output = result.get('result', {})
+            if isinstance(output, list):
+                interface_data = output[0].get('body', {})
             else:
-                interface_data = response['ins_api']['outputs']['output']['body']
+                interface_data = output.get('body', {})
 
             for interface in interface_data.get('TABLE_interface', {}).get('ROW_interface', []):
                 interfaces[interface.get('interface', '')] = interface.get('state', '')
