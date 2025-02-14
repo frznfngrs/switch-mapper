@@ -51,55 +51,57 @@ class ILOClient(BMCClient):
                 'interfaces': []
             }
 
-            # Try different known paths for network interfaces
-            paths_to_try = [
-                'Systems/1/BaseNetworkAdapter/1',  # Some iLO versions
-                'Systems/1/EthernetInterfaces',    # Redfish standard
-                'Systems/1/NetworkAdapters'        # Alternative path
-            ]
-
             print(f"System data keys: {list(system_data.keys())}")  # Debug output
 
-            # Check system data first
-            if 'EthernetInterfaces' in system_data:
-                eth_uri = system_data['EthernetInterfaces'].get('@odata.id', '')
-                if eth_uri:
-                    try:
-                        eth_data = self._send_request(eth_uri.split('/redfish/v1/')[-1])
-                        print(f"EthernetInterfaces data: {eth_data}")  # Debug output
-                        for member in eth_data.get('Members', []):
-                            member_uri = member.get('@odata.id', '')
-                            if member_uri:
-                                interface = self._send_request(member_uri.split('/redfish/v1/')[-1])
-                                if interface.get('MACAddress'):
-                                    network_info['interfaces'].append({
-                                        'name': interface.get('Name', ''),
-                                        'mac_address': interface.get('MACAddress', '').upper(),
-                                        'status': interface.get('Status', {}).get('State', 'OK')
-                                    })
-                    except Exception as e:
-                        print(f"Error accessing EthernetInterfaces: {str(e)}")
-
-            # If no interfaces found, try direct paths
-            if not network_info['interfaces']:
-                for path in paths_to_try:
-                    try:
-                        data = self._send_request(path)
-                        print(f"Trying path {path}: {list(data.keys())}")  # Debug output
-                        
-                        if 'Members' in data:
-                            for member in data['Members']:
+            # First try: Check NetworkInterfaces in system data
+            if 'NetworkInterfaces' in system_data and '@odata.id' in system_data['NetworkInterfaces']:
+                try:
+                    net_uri = system_data['NetworkInterfaces']['@odata.id']
+                    net_data = self._send_request(net_uri.split('/redfish/v1/')[-1])
+                    print(f"NetworkInterfaces data keys: {list(net_data.keys())}")
+                    if 'Members' in net_data:
+                        for member in net_data['Members']:
+                            try:
                                 member_uri = member.get('@odata.id', '')
                                 if member_uri:
                                     interface = self._send_request(member_uri.split('/redfish/v1/')[-1])
-                                    if interface.get('MACAddress'):
+                                    print(f"Interface data keys: {list(interface.keys())}")
+                                    # Try to find MAC address in the interface data
+                                    mac = None
+                                    name = interface.get('Name', '')
+                                    
+                                    # Look for MAC in different possible locations
+                                    if 'MacAddress' in interface:
+                                        mac = interface['MacAddress']
+                                    elif 'MACAddress' in interface:
+                                        mac = interface['MACAddress']
+                                    elif 'PhysicalPorts' in interface:
+                                        for port in interface['PhysicalPorts']:
+                                            if 'MacAddress' in port:
+                                                mac = port['MacAddress']
+                                                name = f"{name}-{port.get('Name', '')}"
+                                                break
+                                    
+                                    if mac:
                                         network_info['interfaces'].append({
-                                            'name': interface.get('Name', ''),
-                                            'mac_address': interface.get('MACAddress', '').upper(),
+                                            'name': name,
+                                            'mac_address': mac.upper(),
                                             'status': interface.get('Status', {}).get('State', 'OK')
                                         })
-                    except Exception as e:
-                        print(f"Error with path {path}: {str(e)}")
+                            except Exception as e:
+                                print(f"Error processing interface {member_uri}: {str(e)}")
+                except Exception as e:
+                    print(f"Error accessing NetworkInterfaces: {str(e)}")
+
+            # Second try: Look for direct MAC addresses in system data
+            if not network_info['interfaces']:
+                for key, value in system_data.items():
+                    if isinstance(value, str) and ('MAC' in key.upper()):
+                        network_info['interfaces'].append({
+                            'name': key.replace('MAC', '').replace('Address', ''),
+                            'mac_address': value.upper(),
+                            'status': 'OK'
+                        })
             
             return network_info
             
