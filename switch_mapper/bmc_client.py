@@ -23,7 +23,7 @@ class ILOClient(BMCClient):
         self.session = requests.Session()
         self.session.verify = False
         self.session.auth = (username, password)
-        self.base_url = f"https://{host}/rest/v1"
+        self.base_url = f"https://{host}/redfish/v1"
 
     def _send_request(self, endpoint: str, method: str = 'GET', data: Optional[Dict] = None) -> Dict:
         """Send request to iLO REST API"""
@@ -44,35 +44,62 @@ class ILOClient(BMCClient):
     def get_network_info(self) -> Dict:
         """Get network information from iLO including MAC addresses"""
         try:
-            # Get hostname from system data
+            # Get system and network data
             system_data = self._send_request('Systems/1')
             network_info = {
                 'hostname': system_data.get('HostName', ''),
                 'interfaces': []
             }
-            
-            # First try: Get NICs from system data directly
-            for key, value in system_data.items():
-                if 'MACAddress' in key:
-                    nic_name = key.replace('MACAddress', '')
-                    network_info['interfaces'].append({
-                        'name': nic_name,
-                        'mac_address': value.upper(),
-                        'status': 'OK'
-                    })
-            
-            # Second try: Get NICs from EthernetInterfaces
-            try:
-                eth_data = self._send_request('Systems/1/EthernetInterfaces')
-                if 'Items' in eth_data:
-                    for item in eth_data['Items']:
-                        network_info['interfaces'].append({
-                            'name': item.get('Name', ''),
-                            'mac_address': item.get('MACAddress', '').upper(),
-                            'status': item.get('Status', {}).get('State', 'OK')
-                        })
-            except Exception as e:
-                print(f"Could not get additional network info: {str(e)}")
+
+            # Try different known paths for network interfaces
+            paths_to_try = [
+                'Systems/1/BaseNetworkAdapter/1',  # Some iLO versions
+                'Systems/1/EthernetInterfaces',    # Redfish standard
+                'Systems/1/NetworkAdapters'        # Alternative path
+            ]
+
+            print(f"System data keys: {list(system_data.keys())}")  # Debug output
+
+            # Check system data first
+            if 'EthernetInterfaces' in system_data:
+                eth_uri = system_data['EthernetInterfaces'].get('@odata.id', '')
+                if eth_uri:
+                    try:
+                        eth_data = self._send_request(eth_uri.split('/redfish/v1/')[-1])
+                        print(f"EthernetInterfaces data: {eth_data}")  # Debug output
+                        for member in eth_data.get('Members', []):
+                            member_uri = member.get('@odata.id', '')
+                            if member_uri:
+                                interface = self._send_request(member_uri.split('/redfish/v1/')[-1])
+                                if interface.get('MACAddress'):
+                                    network_info['interfaces'].append({
+                                        'name': interface.get('Name', ''),
+                                        'mac_address': interface.get('MACAddress', '').upper(),
+                                        'status': interface.get('Status', {}).get('State', 'OK')
+                                    })
+                    except Exception as e:
+                        print(f"Error accessing EthernetInterfaces: {str(e)}")
+
+            # If no interfaces found, try direct paths
+            if not network_info['interfaces']:
+                for path in paths_to_try:
+                    try:
+                        data = self._send_request(path)
+                        print(f"Trying path {path}: {list(data.keys())}")  # Debug output
+                        
+                        if 'Members' in data:
+                            for member in data['Members']:
+                                member_uri = member.get('@odata.id', '')
+                                if member_uri:
+                                    interface = self._send_request(member_uri.split('/redfish/v1/')[-1])
+                                    if interface.get('MACAddress'):
+                                        network_info['interfaces'].append({
+                                            'name': interface.get('Name', ''),
+                                            'mac_address': interface.get('MACAddress', '').upper(),
+                                            'status': interface.get('Status', {}).get('State', 'OK')
+                                        })
+                    except Exception as e:
+                        print(f"Error with path {path}: {str(e)}")
             
             return network_info
             
