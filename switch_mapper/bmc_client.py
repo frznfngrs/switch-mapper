@@ -51,27 +51,28 @@ class ILOClient(BMCClient):
                 'interfaces': []
             }
             
-            try:
-                # Try iLO 4 network path first
-                network_data = self._send_request('Systems/1/NetworkPorts')
-                for port in network_data.get('Items', []):
+            # First try: Get NICs from system data directly
+            for key, value in system_data.items():
+                if 'MACAddress' in key:
+                    nic_name = key.replace('MACAddress', '')
                     network_info['interfaces'].append({
-                        'name': port.get('Name', ''),
-                        'mac_address': port.get('AssociatedNetworkAddresses', [''])[0].upper(),
-                        'status': port.get('Status', {}).get('State', 'Unknown')
+                        'name': nic_name,
+                        'mac_address': value.upper(),
+                        'status': 'OK'
                     })
-            except Exception:
-                try:
-                    # Try iLO 5 network path
-                    network_data = self._send_request('Systems/1/BaseNetworkAdapters')
-                    for adapter in network_data.get('Items', []):
+            
+            # Second try: Get NICs from EthernetInterfaces
+            try:
+                eth_data = self._send_request('Systems/1/EthernetInterfaces')
+                if 'Items' in eth_data:
+                    for item in eth_data['Items']:
                         network_info['interfaces'].append({
-                            'name': adapter.get('Name', ''),
-                            'mac_address': adapter.get('MacAddress', '').upper(),
-                            'status': adapter.get('Status', {}).get('State', 'Unknown')
+                            'name': item.get('Name', ''),
+                            'mac_address': item.get('MACAddress', '').upper(),
+                            'status': item.get('Status', {}).get('State', 'OK')
                         })
-                except Exception:
-                    print("Error: Could not find network information using known iLO paths")
+            except Exception as e:
+                print(f"Could not get additional network info: {str(e)}")
             
             return network_info
             
