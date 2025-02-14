@@ -53,14 +53,20 @@ class ILOClient(BMCClient):
 
             print(f"System data keys: {list(system_data.keys())}")  # Debug output
 
-            # First try: Check NetworkInterfaces in system data
-            if 'NetworkInterfaces' in system_data and '@odata.id' in system_data['NetworkInterfaces']:
+            print("\nSystem NetworkInterfaces data:")
+            print(json.dumps(system_data.get('NetworkInterfaces', {}), indent=2))
+            print("\nSystem EthernetInterfaces data:")
+            print(json.dumps(system_data.get('EthernetInterfaces', {}), indent=2))
+
+            # First try: Check EthernetInterfaces
+            if 'EthernetInterfaces' in system_data and '@odata.id' in system_data['EthernetInterfaces']:
                 try:
-                    net_uri = system_data['NetworkInterfaces']['@odata.id']
-                    net_data = self._send_request(net_uri.split('/redfish/v1/')[-1])
-                    print(f"NetworkInterfaces data keys: {list(net_data.keys())}")
-                    if 'Members' in net_data:
-                        for member in net_data['Members']:
+                    eth_uri = system_data['EthernetInterfaces']['@odata.id']
+                    print(f"\nTrying EthernetInterfaces URI: {eth_uri}")
+                    eth_data = self._send_request(eth_uri.split('/redfish/v1/')[-1])
+                    print(f"EthernetInterfaces data: {json.dumps(eth_data, indent=2)}")
+                    if 'Members' in eth_data:
+                        for member in eth_data['Members']:
                             try:
                                 member_uri = member.get('@odata.id', '')
                                 if member_uri:
@@ -93,15 +99,51 @@ class ILOClient(BMCClient):
                 except Exception as e:
                     print(f"Error accessing NetworkInterfaces: {str(e)}")
 
-            # Second try: Look for direct MAC addresses in system data
+            # Second try: Check NetworkInterfaces
+            if not network_info['interfaces'] and 'NetworkInterfaces' in system_data:
+                try:
+                    if '@odata.id' in system_data['NetworkInterfaces']:
+                        net_uri = system_data['NetworkInterfaces']['@odata.id']
+                        print(f"\nTrying NetworkInterfaces URI: {net_uri}")
+                        net_data = self._send_request(net_uri.split('/redfish/v1/')[-1])
+                        print(f"NetworkInterfaces data: {json.dumps(net_data, indent=2)}")
+                        if 'Members' in net_data:
+                            for member in net_data['Members']:
+                                try:
+                                    member_uri = member.get('@odata.id', '')
+                                    if member_uri:
+                                        interface = self._send_request(member_uri.split('/redfish/v1/')[-1])
+                                        print(f"\nInterface data: {json.dumps(interface, indent=2)}")
+                                        if 'MACAddress' in interface:
+                                            network_info['interfaces'].append({
+                                                'name': interface.get('Name', ''),
+                                                'mac_address': interface['MACAddress'].upper(),
+                                                'status': 'OK'
+                                            })
+                                except Exception as e:
+                                    print(f"Error processing interface {member_uri}: {str(e)}")
+                except Exception as e:
+                    print(f"Error accessing NetworkInterfaces: {str(e)}")
+
+            # Third try: Look for any MAC addresses in system data
             if not network_info['interfaces']:
-                for key, value in system_data.items():
-                    if isinstance(value, str) and ('MAC' in key.upper()):
-                        network_info['interfaces'].append({
-                            'name': key.replace('MAC', '').replace('Address', ''),
-                            'mac_address': value.upper(),
-                            'status': 'OK'
-                        })
+                def find_mac_addresses(data, prefix=''):
+                    if isinstance(data, dict):
+                        for key, value in data.items():
+                            if isinstance(value, str) and ('MAC' in key.upper()):
+                                network_info['interfaces'].append({
+                                    'name': f"{prefix}{key.replace('MAC', '').replace('Address', '')}",
+                                    'mac_address': value.upper(),
+                                    'status': 'OK'
+                                })
+                            elif isinstance(value, (dict, list)):
+                                new_prefix = f"{prefix}{key}." if prefix else f"{key}."
+                                find_mac_addresses(value, new_prefix)
+                    elif isinstance(data, list):
+                        for i, item in enumerate(data):
+                            find_mac_addresses(item, f"{prefix}[{i}].")
+
+                find_mac_addresses(system_data)
             
             return network_info
             
